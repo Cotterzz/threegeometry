@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>geometry lab</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; overflow:hidden; background:#0d1014; font:13px/1.4 ui-sans-serif,system-ui,sans-serif; color:#e6e9ee; }
+  canvas { display:block; }
+  .panel {
+    position:fixed; top:14px; max-height:calc(100vh - 28px); overflow:auto;
+    padding:14px 16px; background:rgba(18,22,28,.85); backdrop-filter:blur(8px);
+    border:1px solid #2b323c; border-radius:12px; user-select:none;
+  }
+  #ui { left:14px; width:292px; }
+  #editor { right:14px; width:300px; }
+  h1 { margin:0 0 10px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#8b95a3; }
+  .sub { margin:8px 0 2px; font-size:11px; color:#7d879a; font-style:italic; }
+  .row { margin:9px 0; }
+  .row label { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:#a7b1c0; margin-bottom:4px; }
+  .row label b { color:#7fd1ff; font-weight:600; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; height:4px; -webkit-appearance:none; appearance:none; background:#2b323c; border-radius:3px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#7fd1ff; cursor:pointer; }
+  input[type=range]::-moz-range-thumb { width:14px; height:14px; border:0; border-radius:50%; background:#7fd1ff; cursor:pointer; }
+  select, button { background:#20262f; color:#e6e9ee; border:1px solid #2b323c; border-radius:6px; padding:5px 6px; font:inherit; cursor:pointer; }
+  select, .wide { width:100%; }
+  button:hover, select:hover { border-color:#48546a; }
+  .two { display:grid; grid-template-columns:1fr auto; gap:6px; }
+  .checks { display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; margin:10px 0 2px; font-size:11px; color:#a7b1c0; }
+  .checks label { display:flex; gap:6px; align-items:center; }
+  hr { border:0; border-top:1px solid #2b323c; margin:13px 0 10px; }
+  #stats { margin-top:11px; padding-top:9px; border-top:1px solid #2b323c; font-size:11px; color:#8b95a3; font-variant-numeric:tabular-nums; }
+  #stats b { color:#c9d2de; font-weight:600; }
+  .edHead { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:11px; color:#a7b1c0; margin:8px 0; }
+  .edHead button { width:24px; padding:2px 0; line-height:1; }
+  .edHead b { color:#7fd1ff; min-width:16px; display:inline-block; text-align:center; font-variant-numeric:tabular-nums; }
+   #edList { display:grid; gap:7px 7px; }
+  .pRow { margin:0; min-width:0; }
+  .pLab { display:flex; justify-content:space-between; font-size:10px; color:#6f7987; margin:0 0 2px; }
+  .pLab b { color:#8b95a3; font-weight:600; }
+  .pRow canvas { display:block; width:100%; border-radius:6px; border:1px solid #262d37; cursor:crosshair; touch-action:none; }
+  .pRow.active canvas { border-color:#ffc44d; }
+  .hint { font-size:10px; color:#646e7c; margin:6px 0 0; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div class="panel" id="ui">
+  <h1>geometry lab</h1>
+  <div class="row">
+    <label>geometry class</label>
+    <select id="geoSel"></select>
+  </div>
+  <p class="sub" id="note"></p>
+  <div id="params"></div>
+  <div id="extras"></div>
+  <hr>
+  <div class="row">
+    <label>display</label>
+    <select id="mode">
+      <option value="shaded">shaded + grid</option>
+      <option value="shaded-only">shaded</option>
+      <option value="grid">grid only</option>
+    </select>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="heat"> area heat-map</label>
+    <label><input type="checkbox" id="spin" checked> auto-rotate</label>
+    <label><input type="checkbox" id="anim"> <span id="animLbl">animate</span></label>
+    <label><input type="checkbox" id="flat"> flat shading</label>
+  </div>
+  <div class="row"><button class="wide" id="frame">frame shape</button></div>
+  <div id="stats"></div>
+</div>
+
+<div class="panel" id="editor" style="display:none">
+  <h1>profile rows</h1>
+  <div class="row">
+    <label>preset</label>
+    <div class="two">
+      <select id="edPreset"></select>
+      <button id="edReset" title="reload this preset">↺ reset</button>
+    </div>
+  </div>
+  <div class="edHead">
+    <span>rows <button id="rowsDn">−</button><b id="edRows">8</b><button id="rowsUp">+</button></span>
+    <span>points <button id="ptsDn">−</button><b id="edPts">12</b><button id="ptsUp">+</button></span>
+  </div>
+  <div class="row"><button class="wide" id="edSym">↔ mirror about selected row</button></div>
+  <div id="edList"></div>
+  <p class="hint">drag the dots. horizontal = height (left = base of the shape),
+  vertical = radius from the axis (bottom line = the axis itself).
+  faint lines are the neighbouring rows, the bright curve is the real interpolated
+  section, and the gold outline in the 3D view is the selected row.</p>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CubeSphereGeometry } from './CubeSphereGeometry.js';
+import { SuperShapeGeometry } from './SuperShapeGeometry.js';
+import { LoftLatheGeometry, loftSample, resampleProfiles, cloneProfiles }
+  from './LoftLatheGeometry.js';
+
+const TAU = Math.PI * 2;
+const DPR = Math.min(devicePixelRatio, 2);
+
+// loft presets
+const pts = (...pairs) => pairs.map(([x, y]) => ({ x, y }));
+
+/* procedural mannequin head (not very good, can be improved)
+   HEAD_LEVELS   : cross-sections up the skull. Each is an offset ellipse
+                   defined by its front / back / side radius, so the back
+                   of the head is broader than the face. `tilt` lowers the
+                   level at the front and raises it at the back (jawline).
+   HEAD_FEATURES : localised bumps / hollows added on top —
+                   [ angle°, angleSupport°, y, ySupport, amplitude ]
+   Result is an ordinary rows × points array you can still drag around.   */
+
+// smooth C¹ kernel: 1 at the centre, 0 at |t| >= 1, half-max at |t| = 0.5
+const kern = t => (t <= -1 || t >= 1) ? 0 : Math.cos(t * Math.PI * 0.5) ** 2;
+
+//                   y    front  back  side  tilt
+const HEAD_LEVELS = [
+  [  0.0,  0.00,  0.00,  0.00, 0.0 ],  // axis — centre of the flat base
+  [  0.0,  3.20,  3.20,  3.20, 0.0 ],  // flat base
+  [  0.8,  5.50,  5.80,  5.50, 0.0 ],  // base rim
+  [  3.0,  5.70,  6.10,  5.70, 0.0 ],  // lower neck
+  [  6.0,  5.60,  6.40,  5.80, 0.0 ],  // neck
+  [  8.8,  5.90,  7.10,  6.00, 0.5 ],  // throat
+  [ 10.8,  6.60,  7.70,  6.50, 1.2 ],  // under the jaw
+  [ 12.6,  7.80,  8.30,  6.90, 1.6 ],  // chin / jaw line
+  [ 14.6,  8.30,  8.90,  7.30, 1.0 ],  // lower lip
+  [ 16.2,  8.50,  9.30,  7.60, 0.3 ],  // mouth
+  [ 18.0,  8.60,  9.60,  7.80, 0.0 ],  // nose base (subnasale)
+  [ 19.2,  8.60,  9.80,  7.90, 0.0 ],  // nose tip
+  [ 20.3,  8.55,  9.90,  7.90, 0.0 ],  // upper nose
+  [ 21.6,  8.50, 10.00,  7.90, 0.0 ],  // mid nose / cheek
+  [ 23.8,  8.40, 10.20,  7.80, 0.0 ],  // eyes, nasion
+  [ 25.6,  8.80, 10.30,  7.60, 0.0 ],  // brow
+  [ 27.4,  8.90, 10.30,  7.60, 0.0 ],  // lower forehead
+  [ 29.4,  8.70, 10.10,  7.50, 0.0 ],  // forehead
+  [ 31.4,  8.10,  9.50,  7.20, 0.0 ],  // hairline
+  [ 33.2,  7.10,  8.40,  6.50, 0.0 ],  // upper skull
+  [ 34.6,  5.50,  6.60,  5.20, 0.0 ],
+  [ 35.6,  3.30,  3.90,  3.10, 0.0 ],
+  [ 36.2,  0.00,  0.00,  0.00, 0.0 ]   // crown
+];
+
+const HEAD_FEATURES = [
+  [    0, 20, 22.6, 4.0,  1.00 ],  // nose bridge
+  [    0, 25, 19.3, 2.8,  1.95 ],  // nose tip
+  [   20, 14, 18.3, 2.0,  0.80 ],  // alar wings
+  [  -20, 14, 18.3, 2.0,  0.80 ],
+  [    0, 60, 25.6, 3.0,  0.60 ],  // brow ridge
+  [    0, 20, 25.0, 2.4,  0.25 ],  // glabella
+  [   22, 20, 23.6, 3.0, -0.60 ],  // eye sockets
+  [  -22, 20, 23.6, 3.0, -0.60 ],
+  [   42, 28, 21.6, 3.6,  0.55 ],  // cheekbones
+  [  -42, 28, 21.6, 3.6,  0.55 ],
+  [   36, 24, 16.8, 3.4, -0.40 ],  // cheek hollows
+  [  -36, 24, 16.8, 3.4, -0.40 ],
+  [    0, 26, 16.2, 2.0,  0.50 ],  // lips
+  [    0, 24, 14.4, 1.6, -0.30 ],  // crease below the lip
+  [    0, 34, 12.8, 2.8,  0.80 ],  // chin
+  [   76, 28, 12.3, 3.2,  0.65 ],  // jaw angles
+  [  -76, 28, 12.3, 3.2,  0.65 ],
+  [   62, 30, 25.8, 3.6, -0.50 ],  // temples
+  [  -62, 30, 25.8, 3.6, -0.50 ],
+  [   98, 20, 22.0, 4.6,  1.50 ],  // ears (set behind the midline)
+  [  -98, 20, 22.0, 4.6,  1.50 ],
+  [  180, 90, 10.0, 3.0, -0.30 ]   // nape hollow
+];
+
+function headProfiles(rows = 24) {
+  const NARROW = 0.94;                         // face is slightly narrower than the back
+  const k90 = 1 + (NARROW - 1) * 0.5;
+  const out = [];
+
+  for (let i = 0; i < rows; i++) {
+    const frac = i / rows;
+    const phi = frac * Math.PI * 2;            // row 0 faces +Z
+    const c = Math.cos(phi), s = Math.sin(phi);
+    let deg = frac * 360; if (deg > 180) deg -= 360;
+    const row = [];
+
+    for (const [y, f, b, side, tilt] of HEAD_LEVELS) {
+      let r = 0;
+      if (side > 0) {
+        // offset ellipse: exact front / back / side radii
+        const A = (f + b) * 0.5, d = (f - b) * 0.5;
+        const shrink = Math.sqrt(Math.max(0.05, 1 - (d * d) / (A * A)));
+        const B = (side / (k90 * shrink)) * (1 + (NARROW - 1) * (0.5 + 0.5 * c));
+        const P = (s * s) / (B * B) + (c * c) / (A * A);
+        const Q = -2 * d * c / (A * A);
+        const R = (d * d) / (A * A) - 1;
+        r = (-Q + Math.sqrt(Math.max(0, Q * Q - 4 * P * R))) / (2 * P);
+
+        for (const [cd, sd, yc, sy, amp] of HEAD_FEATURES) {
+          let da = deg - cd;
+          if (da > 180) da -= 360; else if (da < -180) da += 360;
+          const ka = kern(da / sd); if (!ka) continue;
+          const ky = kern((y - yc) / sy); if (!ky) continue;
+          r += amp * ka * ky;
+        }
+      }
+      row.push({ x: Math.max(0, r), y: y - tilt * c });
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+const LOFT_PRESETS = {
+  'head': () => headProfiles(24),
+  'vase': () => {
+    const v = [[0,0],[2.6,0.2],[3.2,1.2],[2.2,2.6],[1.2,4],[1.7,5.4],[2.6,6.6],[2.4,7.4],[1.5,7.8],[0,7.9]];
+    return Array.from({ length: 6 }, () => pts(...v));
+  },
+  'lobed': () => {
+    const base = [[0,0],[2.4,0.3],[3,1.5],[3,5],[2.4,6.4],[1.2,7.4],[0,7.8]];
+    return Array.from({ length: 8 }, (_, i) => {
+      const k = i % 2 ? 0.55 : 1;
+      return base.map(([x, y]) => ({ x: x * k, y }));
+    });
+  },
+  'pebble': () => {
+    const f = k => [[0,0],[2.5*k,0.6],[3.4*k,2],[3.6*k,3.6],[3*k,5.2],[1.8*k,6.4],[0,7]]
+                    .map(([x, y]) => ({ x, y }));
+    return [f(1), f(0.8), f(1.15), f(0.85), f(1), f(0.9), f(1.1), f(0.78)];
+  }
+};
+//REGISTRY
+const DEFS = {
+
+  cubesphere: {
+    label: 'CubeSphereGeometry',
+    note:  'equal-area cube → sphere mapping',
+    params: [
+      { key:'size',     label:'size',                   min:0.25, max:4,  step:0.01,  value:2 },
+      { key:'segments', label:'segments per face edge',  min:1,    max:96, step:1,     value:24, rebuild:true },
+      { key:'morph',    label:'morph (cube → sphere)',   min:0,    max:1,  step:0.001, value:1 }
+    ],
+    toggles: [
+      { key:'equal',        label:'equal-area map', value:true, rebuild:true },
+      { key:'preserveArea', label:'preserve area',  value:false }
+    ],
+    anim: { key:'morph', min:0, max:1, speed:0.25 },
+    create: p => new CubeSphereGeometry(p.size, p.segments, p.morph,
+                                        p.equal ? 'equalArea' : 'normalize', p.preserveArea),
+    fast(geo, p, keys) {
+      if (keys.some(k => !['morph','size','preserveArea'].includes(k))) return false;
+      geo.set({ morph:p.morph, size:p.size, preserveArea:p.preserveArea });
+      return true;
+    }
+  },
+
+  supershape: {
+    label: 'SuperShapeGeometry',
+    note:  'Gielis superformula, spherical product',
+    side:  THREE.DoubleSide,
+    params: [
+      { key:'size',     label:'size',            min:0.25, max:4,   step:0.01, value:1.4 },
+      { key:'m',        label:'m — lobes',       min:0,    max:20,  step:0.05, value:6 },
+      { key:'n1',       label:'n1 — pinch',      min:0.1,  max:8,   step:0.01, value:0.5 },
+      { key:'n2',       label:'n2 — cos power',  min:0.1,  max:8,   step:0.01, value:0.6 },
+      { key:'n3',       label:'n3 — sin power',  min:0.1,  max:8,   step:0.01, value:0.6 },
+      { key:'a',        label:'a — cos scale',   min:0.25, max:3,   step:0.01, value:1 },
+      { key:'b',        label:'b — sin scale',   min:0.25, max:3,   step:0.01, value:1 },
+      { key:'segments', label:'detail',          min:16,   max:320, step:4,    value:160, rebuild:true }
+    ],
+    presets: {
+      'sphere':       { m:0,  n1:1,    n2:1,   n3:1,   a:1, b:1 },
+      'octahedron':   { m:4,  n1:1,    n2:1,   n3:1,   a:1, b:1 },
+      'rounded cube': { m:4,  n1:6,    n2:6,   n3:6,   a:1, b:1 },
+      'pillow':       { m:4,  n1:0.6,  n2:1.6, n3:1.6, a:1, b:1 },
+      'star (5)':     { m:5,  n1:0.3,  n2:0.3, n3:0.3, a:1, b:1 },
+      'spiky ball':   { m:12, n1:0.25, n2:0.4, n3:0.4, a:1, b:1 },
+      'flower':       { m:8,  n1:1,    n2:0.5, n3:0.5, a:1, b:1 },
+      'gem':          { m:6,  n1:2,    n2:4,   n3:4,   a:1, b:1 },
+      'lopsided':     { m:7,  n1:0.6,  n2:0.8, n3:1.6, a:1, b:0.6 }
+    },
+    anim: { key:'m', min:0, max:14, speed:0.12 },
+    create: p => new SuperShapeGeometry(p.size, p.m, p.n1, p.n2, p.n3, p.a, p.b, p.segments),
+    fast(geo, p) { geo.setParams(p); return true; },
+    random() {
+      const r = (a, b) => +(a + Math.random() * (b - a)).toFixed(2);
+      return { m:Math.round(r(1,16)), n1:r(0.2,3), n2:r(0.2,4), n3:r(0.2,4), a:r(0.6,1.5), b:r(0.6,1.5) };
+    }
+  },
+
+  loftlathe: {
+    label: 'LoftLatheGeometry',
+    note:  'lathe with a 2D array of interpolated profiles',
+    side:  THREE.DoubleSide,
+    editor: 'profiles',
+    profilePresets: LOFT_PRESETS,
+    data: { profiles: () => cloneProfiles(LOFT_PRESETS.head()) },
+    params: [
+      { key:'size',     label:'size',             min:0.5, max:8,   step:0.01, value:3 },
+      { key:'radius',   label:'radius scale',     min:0.1, max:3,   step:0.01, value:1 },
+      { key:'height',   label:'height scale',     min:0.1, max:3,   step:0.01, value:1 },
+      { key:'smooth',   label:'linear ↔ smooth',  min:0,   max:1,   step:0.01, value:1 },
+      { key:'segments', label:'sweep segments',   min:6,   max:256, step:1,    value:144, rebuild:true },
+      { key:'rings',    label:'ring detail',      min:2,   max:128, step:1,    value:72,  rebuild:true }
+    ],
+    anim: { key:'smooth', min:0, max:1, speed:0.22 },
+    create: p => new LoftLatheGeometry(p.profiles, {
+      segments:p.segments, rings:p.rings, smooth:p.smooth,
+      size:p.size, radius:p.radius, height:p.height
+    }),
+    fast(geo, p, keys) {
+      if (keys.some(k => !['size','radius','height','smooth'].includes(k))) return false;
+      geo.set({ size:p.size, radius:p.radius, height:p.height, smooth:p.smooth });
+      return true;
+    }
+  }
+};
+
+//three
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(DPR);
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1014);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 400);
+camera.position.set(3.6, 2.4, 4.4);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0x93b6ff, 0x1a1208, 0.55));
+const kl = new THREE.DirectionalLight(0xffffff, 2.1); kl.position.set(4,6,5); scene.add(kl);
+const rl = new THREE.DirectionalLight(0x7fb6ff, 0.9); rl.position.set(-5,-2,-4); scene.add(rl);
+
+const surfMat = new THREE.MeshStandardMaterial({
+  color:0xdfe6f0, metalness:0.15, roughness:0.45,
+  polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1
+});
+const lineMat  = new THREE.LineBasicMaterial({ color:0x0a0e14, transparent:true, opacity:0.35 });
+const guideMat = new THREE.LineBasicMaterial({ color:0xffc44d, depthTest:false, transparent:true, opacity:0.95 });
+
+const mesh  = new THREE.Mesh(new THREE.BufferGeometry(), surfMat);
+const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat);
+const guide = new THREE.Line(new THREE.BufferGeometry(), guideMat);
+guide.renderOrder = 10; guide.visible = false;
+const root = new THREE.Group();
+root.add(mesh, lines, guide);
+scene.add(root);
+
+// state
+const el = id => document.getElementById(id);
+const S = { def:null, params:{}, meta:{}, geometry:null, rows:{}, toggleEls:{},
+            mode:'shaded', heat:false, spin:true, anim:false, acc:null, cnt:null };
+
+function buildGridLines(geo) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', geo.attributes.position);
+  const idx = [];
+  for (const { offset, cols, rows } of (geo.gridPatches || [])) {
+    const at = (i,j) => offset + i * (rows + 1) + j;
+    for (let i = 0; i <= cols; i++) for (let j = 0; j < rows; j++) idx.push(at(i,j), at(i,j+1));
+    for (let j = 0; j <= rows; j++) for (let i = 0; i < cols; i++) idx.push(at(i,j), at(i+1,j));
+  }
+  g.setIndex(idx);
+  return g;
+}
+
+function rebuild() {
+  const old = S.geometry, oldL = lines.geometry;
+  S.geometry = S.def.create(S.params);
+  const n = S.geometry.attributes.position.count;
+  S.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n*3).fill(1), 3));
+  mesh.geometry  = S.geometry;
+  lines.geometry = buildGridLines(S.geometry);
+  if (old) old.dispose();
+  if (oldL) oldL.dispose();
+  refresh();
+}
+
+// generic area analysis + heat map
+const _a=new THREE.Vector3(), _b=new THREE.Vector3(), _c=new THREE.Vector3();
+const _e1=new THREE.Vector3(), _e2=new THREE.Vector3(), _x=new THREE.Vector3();
+function triArea(pos,i,j,k){
+  _a.fromArray(pos,i*3);_b.fromArray(pos,j*3);_c.fromArray(pos,k*3);
+  _e1.subVectors(_b,_a);_e2.subVectors(_c,_a);
+  return _x.crossVectors(_e1,_e2).length()*0.5;
+}
+
+function refresh() {
+  const geo=S.geometry, pos=geo.attributes.position.array, index=geo.index.array;
+  const nv=geo.attributes.position.count;
+  if(!S.acc||S.acc.length!==nv){S.acc=new Float32Array(nv);S.cnt=new Float32Array(nv);}
+  const acc=S.acc,cnt=S.cnt; acc.fill(0); cnt.fill(0);
+
+  let total=0;
+  for(let t=0;t<index.length;t+=3){
+    const i=index[t],j=index[t+1],k=index[t+2];
+    const A=triArea(pos,i,j,k); total+=A;
+    acc[i]+=A;acc[j]+=A;acc[k]+=A; cnt[i]++;cnt[j]++;cnt[k]++;
+  }
+  let min=Infinity,max=0,sum=0,n=0;
+  for(let v=0;v<nv;v++) if(cnt[v]){const d=acc[v]/cnt[v]; if(d<min)min=d; if(d>max)max=d; sum+=d;n++;}
+  const mean=sum/n||1;
+
+  const col=geo.attributes.color.array;
+  if(S.heat){
+    const c=new THREE.Color();
+    for(let v=0;v<nv;v++){
+      const r=cnt[v]?(acc[v]/cnt[v])/mean:1;
+      c.setHSL(0.66-THREE.MathUtils.clamp((Math.log2(r)+1)/2,0,1)*0.66,0.85,0.5);
+      col[v*3]=c.r;col[v*3+1]=c.g;col[v*3+2]=c.b;
+    }
+  } else col.fill(1);
+  geo.attributes.color.needsUpdate=true;
+  surfMat.vertexColors=S.heat; surfMat.needsUpdate=true;
+
+  el('stats').innerHTML=
+    `vertices <b>${nv.toLocaleString()}</b> &nbsp; triangles <b>${(index.length/3).toLocaleString()}</b><br>
+     total surface area <b>${total.toFixed(4)}</b><br>
+     cell density min <b>${(min/mean).toFixed(3)}</b>× &nbsp; max <b>${(max/mean).toFixed(3)}</b>×<br>
+     spread max/min <b>${(max/min).toFixed(3)}</b>
+     <span style="opacity:.6">(heat: blue=small, red=large)</span>`;
+
+  if (ED.active >= 0) updateGuide(ED.active);
+}
+
+/* --------------------------- param UI (left) --------------------------- */
+const dec=s=>(String(s).split('.')[1]||'').length;
+function showVal(k){const r=S.rows[k];if(r)r.val.textContent=(+S.params[k]).toFixed(dec(r.p.step));}
+
+function applyParams(patch) {
+  const keys=Object.keys(patch).filter(k=>S.params[k]!==patch[k]);
+  if(!keys.length)return;
+  Object.assign(S.params,patch);
+  for(const k of keys){
+    if(S.rows[k]){S.rows[k].input.value=S.params[k];showVal(k);}
+    if(S.toggleEls[k])S.toggleEls[k].checked=S.params[k];
+  }
+  if(keys.some(k=>S.meta[k]?.rebuild)||!S.def.fast||!S.def.fast(S.geometry,S.params,keys)) rebuild();
+  else refresh();
+  if(keys.includes('smooth')&&ED.rows.length) drawRows();
+}
+
+function buildPanel(){
+  const host=el('params'); host.innerHTML='';
+  const extras=el('extras'); extras.innerHTML='';
+  S.rows={}; S.toggleEls={};
+
+  for(const p of S.def.params){
+    const row=document.createElement('div'); row.className='row';
+    const lab=document.createElement('label');
+    const nm=document.createElement('span'); nm.textContent=p.label||p.key;
+    const val=document.createElement('b'); lab.append(nm,val);
+    const inp=document.createElement('input');
+    inp.type='range'; inp.min=p.min; inp.max=p.max; inp.step=p.step; inp.value=S.params[p.key];
+    inp.oninput=()=>applyParams({[p.key]:+inp.value});
+    row.append(lab,inp); host.append(row);
+    S.rows[p.key]={input:inp,val,p}; showVal(p.key);
+  }
+  if(S.def.toggles?.length){
+    const grid=document.createElement('div'); grid.className='checks';
+    for(const t of S.def.toggles){
+      const l=document.createElement('label');
+      const c=document.createElement('input'); c.type='checkbox'; c.checked=S.params[t.key];
+      c.onchange=()=>applyParams({[t.key]:c.checked});
+      l.append(c,document.createTextNode(' '+t.label)); grid.append(l); S.toggleEls[t.key]=c;
+    }
+    extras.append(grid);
+  }
+  if(S.def.presets){
+    const row=document.createElement('div'); row.className='row';
+    const lab=document.createElement('label'); lab.innerHTML='<span>presets</span>';
+    const sel=document.createElement('select');
+    sel.innerHTML='<option value="">— choose —</option>'+Object.keys(S.def.presets).map(k=>`<option>${k}</option>`).join('');
+    sel.onchange=()=>{if(sel.value)applyParams({...S.def.presets[sel.value]});};
+    row.append(lab,sel); extras.append(row);
+  }
+  if(S.def.random){
+    const row=document.createElement('div'); row.className='row';
+    const btn=document.createElement('button'); btn.className='wide'; btn.textContent='randomize';
+    btn.onclick=()=>applyParams(S.def.random());
+    row.append(btn); extras.append(row);
+  }
+  el('animLbl').textContent=S.def.anim?`animate ${S.def.anim.key}`:'animate';
+}
+
+/* profile editor (right UI)
+   axes are rotated: screen-x = height, screen-y = radius, so tall thin
+   lathe profiles fill the landscape canvases at a ~1:1 aspect.          */
+const ED = { rows:[], bounds:null, drag:null, active:-1, preset:'', cH:104 };
+const PAD = 9;
+const sX = (yv,w)=>{const b=ED.bounds; return PAD + (yv-b.y0)/(b.y1-b.y0)*(w-2*PAD);};
+const sY = (rv,h)=>{const b=ED.bounds; return h-PAD - rv/b.r1*(h-2*PAD);};
+const dY = (px,w)=>{const b=ED.bounds; return b.y0 + (px-PAD)/(w-2*PAD)*(b.y1-b.y0);};
+const dR = (py,h)=>{const b=ED.bounds; return (h-PAD-py)/(h-2*PAD)*b.r1;};
+
+function profileBounds(profiles){
+  let rm=0,y0=Infinity,y1=-Infinity;
+  for(const row of profiles) for(const p of row){ rm=Math.max(rm,p.x); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y); }
+  const ys=(y1-y0)||1;
+  return { r1:Math.max(rm*1.12,0.5), y0:y0-ys*0.04, y1:y1+ys*0.04 };
+}
+
+function drawPolyline(ctx,row,w,h,style,width=1){
+  ctx.strokeStyle=style; ctx.lineWidth=width; ctx.beginPath();
+  row.forEach((p,j)=>{ const X=sX(p.y,w),Y=sY(p.x,h); j?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
+  ctx.stroke();
+}
+
+const _s={x:0,y:0};
+function drawRow(R){
+  const { ctx,w,h,i }=R;
+  const prof=S.params.profiles, n=prof.length;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle='#11151b'; ctx.fillRect(0,0,w,h);
+
+  // the rotation axis (r = 0)
+  ctx.strokeStyle='#2a323d'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); const ax=sY(0,h)+.5; ctx.moveTo(0,ax); ctx.lineTo(w,ax); ctx.stroke();
+  ctx.setLineDash([]);
+
+  drawPolyline(ctx,prof[(i-1+n)%n],w,h,'rgba(150,170,200,0.14)');
+  drawPolyline(ctx,prof[(i+1)%n],  w,h,'rgba(150,170,200,0.14)');
+  drawPolyline(ctx,prof[i],        w,h,'rgba(127,209,255,0.22)');
+
+  const sm=S.params.smooth ?? 1;
+  ctx.strokeStyle='#7fd1ff'; ctx.lineWidth=1.7; ctx.beginPath();
+  for(let k=0;k<=72;k++){
+    loftSample(prof,i/n,k/72,sm,_s);
+    const X=sX(_s.y,w),Y=sY(Math.max(0,_s.x),h);
+    k?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+  }
+  ctx.stroke();
+
+  prof[i].forEach((p,j)=>{
+    const X=sX(p.y,w),Y=sY(p.x,h);
+    const hot=ED.drag&&ED.drag.row===i&&ED.drag.j===j;
+    ctx.beginPath(); ctx.arc(X,Y,hot?4.6:3.1,0,TAU);
+    ctx.fillStyle=hot?'#ffc44d':'#e3ecf7'; ctx.fill();
+  });
+}
+function drawRows(){ ED.rows.forEach(drawRow); }
+
+function setActive(i){
+  ED.active=i;
+  ED.rows.forEach(R=>R.wrap.classList.toggle('active',R.i===i));
+  updateGuide(i);
+}
+
+function updateGuide(i){
+  if(i<0||!S.geometry.sectionPoints){ guide.visible=false; return; }
+  const n=S.params.profiles.length;
+  const arr=S.geometry.sectionPoints(i/n,120);
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(arr,3));
+  guide.geometry.dispose(); guide.geometry=g; guide.visible=true;
+}
+
+function pushProfiles(full=false){
+  if(full){ if(!ED.bounds) ED.bounds=profileBounds(S.params.profiles); rebuild(); buildEditor(); }
+  else { S.geometry.set({ profiles:S.params.profiles }); refresh(); }
+}
+
+function attachRowEvents(R){
+  const { cv,w,h,i }=R;
+  cv.addEventListener('pointerdown',ev=>{
+    const r=cv.getBoundingClientRect();
+    const mx=ev.clientX-r.left, my=ev.clientY-r.top;
+    const row=S.params.profiles[i];
+    let best=-1,bd=15*15;
+    row.forEach((p,j)=>{ const dx=sX(p.y,w)-mx,dy=sY(p.x,h)-my,d=dx*dx+dy*dy; if(d<bd){bd=d;best=j;} });
+    setActive(i);
+    if(best<0){ drawRows(); return; }
+    ED.drag={ row:i, j:best };
+    cv.setPointerCapture(ev.pointerId);
+    drawRow(R);
+  });
+  cv.addEventListener('pointermove',ev=>{
+    if(!ED.drag||ED.drag.row!==i) return;
+    const r=cv.getBoundingClientRect(), b=ED.bounds;
+    const p=S.params.profiles[i][ED.drag.j];
+    p.y=Math.min(b.y1,Math.max(b.y0,dY(ev.clientX-r.left,w)));
+    p.x=Math.min(b.r1,Math.max(0,   dR(ev.clientY-r.top ,h)));
+    drawRow(R); pushProfiles();
+  });
+  const end=()=>{ if(ED.drag&&ED.drag.row===i){ ED.drag=null; drawRow(R); } };
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',end);
+}
+
+function buildEditor(){
+  const panel=el('editor');
+  ED.rows=[]; ED.drag=null;
+  if(!S.def.editor){ panel.style.display='none'; guide.visible=false; ED.active=-1; return; }
+  panel.style.display='';
+
+  const prof=S.params.profiles;
+  if(!ED.bounds) ED.bounds=profileBounds(prof);
+  el('edRows').textContent=prof.length;
+  el('edPts').textContent=prof[0].length;
+
+  const list=el('edList'); list.innerHTML='';
+  const twoCol = prof.length > 12;
+  list.style.gridTemplateColumns = twoCol ? '1fr 1fr' : '1fr';
+  prof.forEach((row,i)=>{
+    const wrap=document.createElement('div'); wrap.className='pRow';
+    const lab=document.createElement('div'); lab.className='pLab';
+    const deg=Math.round(i/prof.length*360);
+    const tag = deg===0?'front':deg===180?'back':(deg===90||deg===270)?'side':'';
+    lab.innerHTML=`<span>row ${i}${tag?' · '+tag:''}</span><b>${deg}°</b>`;
+    const cv=document.createElement('canvas');
+    wrap.append(lab,cv); list.append(wrap);
+    const w=cv.clientWidth||264;
+    const aspect=ED.bounds.r1/((ED.bounds.y1-ED.bounds.y0)||1);
+    const h=Math.round(Math.min(150,Math.max(twoCol?54:68,(w-2*PAD)*aspect+2*PAD)));
+    cv.style.height=h+'px';
+    cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+    const R={ i,cv,ctx:cv.getContext('2d'),wrap,w,h };
+    ED.rows.push(R); attachRowEvents(R);
+  });
+  if(ED.active>=prof.length) ED.active=-1;
+  if(ED.active>=0) setActive(ED.active); else guide.visible=false;
+  drawRows();
+}
+
+function loadProfilePreset(){
+  S.params.profiles=cloneProfiles(S.def.profilePresets[ED.preset]());
+  ED.bounds=null; ED.active=-1; guide.visible=false;
+  pushProfiles(true); frameShape();
+}
+
+function setDims(rows,count){
+  S.params.profiles=resampleProfiles(S.params.profiles,rows,count);
+  pushProfiles(true);
+}
+el('rowsUp').onclick=()=>{const p=S.params.profiles; if(p.length<48) setDims(p.length+1,p[0].length);};
+el('rowsDn').onclick=()=>{const p=S.params.profiles; if(p.length>2)  setDims(p.length-1,p[0].length);};
+el('ptsUp').onclick =()=>{const p=S.params.profiles; if(p[0].length<40) setDims(p.length,p[0].length+1);};
+el('ptsDn').onclick =()=>{const p=S.params.profiles; if(p[0].length>3)  setDims(p.length,p[0].length-1);};
+el('edPreset').onchange=e=>{ ED.preset=e.target.value; loadProfilePreset(); };
+el('edReset').onclick  =()=> loadProfilePreset();
+el('edSym').onclick=()=>{
+  const P=S.params.profiles, n=P.length, axis=Math.max(0,ED.active);
+  for(let d=1;d<=Math.floor(n/2);d++){
+    const i=(axis+d)%n, j=(axis-d+n)%n;
+    P[j]=P[i].map(q=>({x:q.x,y:q.y}));
+  }
+  pushProfiles(); drawRows();
+};
+
+// viewport
+function frameShape(){
+  S.geometry.computeBoundingSphere();
+  const r=S.geometry.boundingSphere?.radius||1;
+  const d=(r/Math.tan(camera.fov*Math.PI/360))*1.35;
+  camera.position.setLength(Number.isFinite(d)?d:5);
+  controls.target.set(0,0,0); controls.update();
+}
+function applyMode(){
+  mesh.visible  = S.mode==='shaded'||S.mode==='shaded-only';
+  lines.visible = S.mode==='shaded'||S.mode==='grid';
+  if(S.mode==='grid'){lineMat.color.set(0x62a8e0);lineMat.opacity=0.85;}
+  else{lineMat.color.set(0x0a0e14);lineMat.opacity=0.35;}
+}
+
+function selectGeometry(key){
+  S.def=DEFS[key]; S.params={}; S.meta={};
+  for(const p of S.def.params){S.params[p.key]=p.value;S.meta[p.key]=p;}
+  for(const t of (S.def.toggles||[])){S.params[t.key]=t.value;S.meta[t.key]=t;}
+  for(const k in (S.def.data||{})) S.params[k]=S.def.data[k]();
+  el('note').textContent=S.def.note||'';
+  surfMat.side=S.def.side||THREE.FrontSide;
+
+  ED.bounds=null; ED.active=-1; ED.drag=null;
+  // the preset <select> is populated ONCE per geometry so reloading a preset
+  // can never silently reset what it displays
+  if(S.def.profilePresets){
+    ED.preset=Object.keys(S.def.profilePresets)[0];
+    const sel=el('edPreset');
+    sel.innerHTML=Object.keys(S.def.profilePresets).map(k=>`<option>${k}</option>`).join('');
+    sel.value=ED.preset;
+  } else ED.preset='';
+
+  buildPanel(); rebuild(); buildEditor(); frameShape();
+}
+
+// bindings
+const geoSel=el('geoSel');
+geoSel.innerHTML=Object.entries(DEFS).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');
+geoSel.onchange=()=>selectGeometry(geoSel.value);
+
+el('mode').onchange=e=>{S.mode=e.target.value;applyMode();};
+el('heat').onchange=e=>{S.heat=e.target.checked;refresh();};
+el('spin').onchange=e=>{S.spin=e.target.checked;};
+el('anim').onchange=e=>{S.anim=e.target.checked;};
+el('flat').onchange=e=>{surfMat.flatShading=e.target.checked;surfMat.needsUpdate=true;};
+el('frame').onclick=frameShape;
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// loop
+selectGeometry('cubesphere');
+applyMode();
+
+const clock=new THREE.Clock();
+renderer.setAnimationLoop(()=>{
+  if(S.spin) root.rotation.y+=clock.getDelta()*0.25;
+  if(S.anim&&S.def.anim){
+    const A=S.def.anim;
+    const m=(clock.elapsedTime*A.speed*2)%2;
+    const t=m<1?m:2-m;
+    applyParams({[A.key]:A.min+(A.max-A.min)*(t*t*(3-2*t))});
+  }
+  controls.update();
+  renderer.render(scene,camera);
+});
+</script>
+</body>
+</html>
