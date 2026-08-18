@@ -4,9 +4,12 @@ custom geometry classes for threejs
 ## CubeSphereGeometry
 
 Maps cube to sphere with morphing and options to keep face area consistent and total surface area the same.
+
 Based on randomdudewhocodes Shadertoy example: https://shadertoy.com/view/NfcSRH
+
 For more info, see:
 https://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
+
 And Sebastian Lague's video: https://youtube.com/watch?v=sLqXFF8mlEU
 
 ## SuperShapeGeometry
