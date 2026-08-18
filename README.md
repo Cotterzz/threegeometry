@@ -22,4 +22,6 @@ Something I wrote for a project a while back - takes multiple sets of lathe poin
 
 ---
 
-Plus an interactive viewer/explorer
+Plus an interactive viewer/explorer:
+
+https://cotterzz.github.io/threegeometry/
